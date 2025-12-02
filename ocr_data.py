@@ -94,7 +94,7 @@ def extract_visual_elements(source_image: Image.Image, output_folder: str, page_
         region_of_interest = bin_img[y:y+h, x:x+w]
         pixel_density = cv2.countNonZero(region_of_interest) / region_of_interest.size
         
-        if pixel_density > 0.15:
+        if pixel_density > 0.12:
             continue 
 
         # Export valid image region
@@ -398,9 +398,9 @@ def orchestrate_pipeline(source_path: str, start_page: int = 1, end_page: Option
 
     # Determine Output Filename
     if start_page == 1 and end_page is None:
-        doc_name = f"{f_base}_Full.docx"
-    else:
         doc_name = f"{f_base}.docx"
+    else:
+        doc_name = f"{f_base}_p{start_page}-{end_page}.docx"
         
     full_doc_path = os.path.join(specific_out_dir, doc_name)
     generate_word_document(aggregated_data, full_doc_path)
