@@ -99,7 +99,7 @@ def extract_visual_elements(source_image: Image.Image, output_folder: str, page_
 
         # Export valid image region
         cropped_region = image_arr[y:y+h, x:x+w]
-        # SỬA LỖI Ở ĐÂY: page_index đã được định nghĩa đúng ở tham số hàm
+ 
         filename = f"p{page_index + 1}_img{element_counter}.jpg"
         full_save_path = os.path.join(output_folder, filename)
         
