@@ -415,7 +415,7 @@ def orchestrate_pipeline(source_path: str, start_page: int = 1, end_page: Option
 # ENTRY POINT
 # ==============================================================================
 if __name__ == "__main__":
-    cli = argparse.ArgumentParser(description="Medical OCR Extraction Tool")
+    cli = argparse.ArgumentParser(description="OCR Extraction Tool")
     
     cli.add_argument("--input", type=str, default=None, help="Path to specific PDF file")
     cli.add_argument("--start", type=int, default=1, help="Start page")
