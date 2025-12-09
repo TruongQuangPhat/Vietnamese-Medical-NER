@@ -22,7 +22,6 @@ Image.MAX_IMAGE_PIXELS = None
 
 class Config:
     DPI_RESOLUTION = 300 # Giữ 300 để OCR nét nhất
-    TOLERANCE_Y = 15     # Dung sai để gộp các từ thành 1 dòng
     MARGIN_HEADER = 0.05 # Bỏ 5% trên cùng (Header)
     MARGIN_FOOTER = 0.1  # Bỏ 10% dưới cùng (Footer)
     BATCH_SIZE = 10
@@ -84,26 +83,33 @@ def validate_header(text):
 # ==============================================================================
 # 2. OCR ENGINE (TEXT ONLY)
 # ==============================================================================
-def ocr_process_page(img_np) -> List[Dict]:
-    h_page, w_page = img_np.shape[:2]
+def ocr_process_page(img_array: np.ndarray) -> List[Dict]:
+    img_h, img_w = img_array.shape[:2]
     
-    # 1. Detect Text Boxes
     try:
-        results = text_detector.readtext(img_np, detail=1, width_ths=0.7)
+        results = text_detector.readtext(
+            img_array, 
+            detail=1,
+            width_ths=0.7,      # Giữ nguyên độ rộng
+            text_threshold=0.5, # (Mặc định 0.7) -> Giảm xuống 0.5 để bắt được chữ mờ/nhỏ (Subscript)
+            low_text=0.3,       # (Mặc định 0.4) -> Giữ lại các vùng có độ tin cậy thấp (như số 2 nhỏ xíu)
+            link_threshold=0.2  # (Mặc định 0.4) -> Giảm xuống để tách các ký tự dính nhau (50mg -> 50 mg) tốt hơn
+        )
     except: return []
 
     raw_blocks = []
-    y_min_limit = h_page * Config.MARGIN_HEADER
-    y_max_limit = h_page * (1 - Config.MARGIN_FOOTER)
+    y_min_limit = img_h * Config.MARGIN_HEADER
+    y_max_limit = img_h * (1 - Config.MARGIN_FOOTER)
 
-    # 2. Filter & Recognize
     for box, _, conf in results:
         if conf < 0.25: continue
         
-        # Lấy tọa độ trung tâm Y
-        y_center = sum([p[1] for p in box]) / 4
+        y_coords = [p[1] for p in box]
+        y_center = sum(y_coords) / 4
         
-        # Bỏ Header/Footer
+        # Calculate Height of the text box (Quan trọng cho Dynamic Tolerance)
+        box_height = max(y_coords) - min(y_coords)
+
         if y_center < y_min_limit or y_center > y_max_limit: continue
 
         xs = [p[0] for p in box]
@@ -111,50 +117,67 @@ def ocr_process_page(img_np) -> List[Dict]:
         x1, x2 = int(min(xs)), int(max(xs))
         y1, y2 = int(min(ys)), int(max(ys))
 
-        # Crop ảnh chứa chữ
-        crop = img_np[max(0, y1-5):min(h_page, y2+5), max(0, x1-5):min(w_page, x2+5)]
+        crop = img_array[max(0, y1-5):min(img_h, y2+5), max(0, x1-5):min(img_w, x2+5)]
         if crop.size == 0: continue
 
         try:
-            # Padding + Recognize
             padded_crop = add_padding(crop)
             text = text_recognizer.predict(Image.fromarray(padded_crop))
             
             if len(text.strip()) > 1:
                 raw_blocks.append({
                     'text': text.strip(),
-                    'y_center': y_center,
-                    'x_min': x1
+                    'y_center': y_center / img_h,
+                    'x_min': x1 / img_w,
+                    'x_max': x2 / img_w,
+                    'height': box_height / img_h # Lưu chiều cao chuẩn hóa
                 })
         except: continue
 
     if not raw_blocks: return []
 
-    # 3. Merge Lines (Gộp các từ thành dòng)
-    # Sắp xếp theo thứ tự từ trên xuống dưới
-    raw_blocks.sort(key=lambda k: k['y_center'])
+    # --- [FIX LOGIC] DYNAMIC LINE MERGING ---
+    raw_blocks.sort(key=lambda item: item['y_center'])
     
     lines = []
     current_line = [raw_blocks[0]]
     
     for i in range(1, len(raw_blocks)):
-        # Nếu khoảng cách Y nhỏ -> cùng dòng
-        if abs(raw_blocks[i]['y_center'] - current_line[-1]['y_center']) <= Config.TOLERANCE_Y:
-            current_line.append(raw_blocks[i])
+        current_block = raw_blocks[i]
+        prev_block = current_line[-1]
+        
+        # Tính chiều cao trung bình của dòng đang xét
+        avg_height = sum(b['height'] for b in current_line) / len(current_line)
+        
+        # Dynamic Threshold: 60% chiều cao dòng chữ
+        # Nếu dòng cao (tiêu đề), threshold lớn -> Chấp nhận nghiêng
+        # Nếu dòng thấp (footnote), threshold nhỏ -> Tách dòng chặt chẽ
+        dynamic_threshold = avg_height * 0.6 
+        
+        diff = abs(current_block['y_center'] - prev_block['y_center'])
+        
+        if diff <= dynamic_threshold:
+            current_line.append(current_block)
         else:
             lines.append(current_line)
-            current_line = [raw_blocks[i]]
+            current_line = [current_block]
     lines.append(current_line)
 
-    # 4. Final Text Construction
     final_output = []
-    for line in lines:
-        # Trong 1 dòng, sắp xếp từ trái qua phải
-        line.sort(key=lambda k: k['x_min'])
-        joined_text = " ".join([b['text'] for b in line])
+    for line_group in lines:
+        line_group.sort(key=lambda item: item['x_min'])
+        joined_text = " ".join([b['text'] for b in line_group])
+        
+        min_x = line_group[0]['x_min']
+        max_x = line_group[-1]['x_max']
+        avg_y = sum(b['y_center'] for b in line_group) / len(line_group) # Re-calc avg Y
         
         final_output.append({
-            'content': joined_text
+            'type': 'text',
+            'content': joined_text,
+            'y_center': avg_y,
+            'x_min': min_x,
+            'x_max': max_x
         })
         
     return final_output
@@ -206,7 +229,7 @@ def run_pipeline(pdf_path, start=1, end=None):
         return
 
     base_name = os.path.splitext(os.path.basename(pdf_path))[0]
-    out_dir = os.path.join("output_results", f"{base_name}_result")
+    out_dir = os.path.join("output", f"{base_name}")
     os.makedirs(out_dir, exist_ok=True)
     
     print(f"Processing: {base_name}")
@@ -258,8 +281,7 @@ if __name__ == "__main__":
     if args.input:
         run_pipeline(args.input, args.start, args.end)
     else:
-        # Quét thư mục input_pdf
-        target = "input_pdf"
+        target = "input"
         if os.path.exists(target):
             for f in os.listdir(target):
                 if f.endswith(".pdf"):
