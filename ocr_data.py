@@ -87,14 +87,7 @@ def ocr_process_page(img_array: np.ndarray) -> List[Dict]:
     img_h, img_w = img_array.shape[:2]
     
     try:
-        results = text_detector.readtext(
-            img_array, 
-            detail=1,
-            width_ths=0.7,      # Giữ nguyên độ rộng
-            text_threshold=0.5, # (Mặc định 0.7) -> Giảm xuống 0.5 để bắt được chữ mờ/nhỏ (Subscript)
-            low_text=0.3,       # (Mặc định 0.4) -> Giữ lại các vùng có độ tin cậy thấp (như số 2 nhỏ xíu)
-            link_threshold=0.2  # (Mặc định 0.4) -> Giảm xuống để tách các ký tự dính nhau (50mg -> 50 mg) tốt hơn
-        )
+        results = text_detector.readtext(img_array, detail=1, width_ths=0.7)
     except: return []
 
     raw_blocks = []
