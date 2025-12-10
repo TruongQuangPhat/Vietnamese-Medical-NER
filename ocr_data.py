@@ -26,13 +26,16 @@ class Config:
     """
     DPI_RESOLUTION = 300  # High DPI for better OCR accuracy
     TOLERANCE_Y = 30      # Vertical tolerance (pixels) for line merging
-    MARGIN_HEADER = 0.08  # Ignore top 8% (Header)
-    MARGIN_FOOTER = 0.08  # Ignore bottom 8% (Footer)
+    MARGIN_HEADER = 0.05  # Ignore top 5% (Header)
+    MARGIN_FOOTER = 0.1   # Ignore bottom 10% (Footer)
     BATCH_SIZE = 10       # Process 10 pages at a time to save RAM
     
-    # Regex to detect Level 2 Headers (e.g., "2.1. Introduction", "3.5 Results")
-    # Matches: Number -> Dot -> Number -> Optional Dot -> Space -> Content
-    REGEX_HEADER_L2 = re.compile(r"^\s*(\d+(?:\.\d+)+)\s*\.?\s+(?P<content>.*)$")
+    # [UPDATED REGEX]
+    # 1. (\d+\.\d+) : Mandatory Number.Number format (Level 2). E.g., 2.1
+    # 2. \s* : Accept extra whitespace (OCR artifacts).
+    # 3. \.?        : Dot is OPTIONAL (Accepts "2.1." or "2.1").
+    # 4. \s+        : MANDATORY space afterwards (prevents matching 2.1.1).
+    REGEX_HEADER_L2 = re.compile(r"^\s*(\d+\.\d+)\s*\.?\s+(?P<content>.*)$")
 
 
 # --- INIT DEVICE ---
@@ -72,49 +75,45 @@ def add_padding(img_np: np.ndarray, pad: int = 10) -> np.ndarray:
     return padded
 
 
-def validate_header(text: str) -> bool:
+def validate_header(text):
     """
-    Validates if a text string is a Level 2 Header (e.g., "2.1 Overview").
-    
-    Logic:
-        1. Checks string length.
-        2. Filters out common false positives (Figure captions, Tables).
-        3. Uses Regex to check numerical structure (X.Y).
-        4. Filters out measurement units (e.g., "1.5 mg") that mimic header format.
-        
-    Args:
-        text (str): The text content to validate.
-        
-    Returns:
-        bool: True if it is a valid header, False otherwise.
+    Validates if a line is a Level 2 Header (e.g., 2.1 or 2.1.).
+    Excludes Level 1 (2.) and Level 3 (2.1.1).
     """
-    if not text or len(text.strip()) < 4: return False
+    if len(text) < 4: return False
     clean = text.strip()
     
     # 1. Blacklist check (Skip Figure/Table captions)
-    if any(clean.lower().startswith(x) for x in ["Hình", "Hinh", "Bảng", "Bang", "Sơ đồ"]):
+    # "Hình", "Bảng", "Sơ đồ" -> Figure, Table, Diagram
+    if any(clean.lower().startswith(x) for x in ["Hình", "Hinh", "Bảng", "Bang", "Sơ đồ", "Biểu đồ"]):
         return False
 
-    # 2. Regex Pattern Match
+    # 2. Check Regex Pattern
     match = Config.REGEX_HEADER_L2.match(clean)
-    if not match: return False
+    if not match: 
+        return False 
     
-    # 3. Check Numeric Level (Must have exactly 2 parts, e.g., 2.1)
-    number_str = match.group(1).strip('.')
-    nums = [n for n in number_str.split('.') if n.isdigit()]
-    
-    if len(nums) != 2: return False
-    
-    # 4. Content Analysis (Filter out Units like mg, ml)
+    # 3. Double Check (Count numbers to ensure Level 3 is excluded)
+    # Get the captured number part (E.g., "2.1")
+    number_part = match.group(1)
+    # Check if there are exactly 2 numbers
+    if len(number_part.split('.')) != 2:
+        return False
+
+    # 4. Filter measurement units (Avoid mistaking "1.5 mg" for a header)
     content = match.group("content")
-    if re.search(r"^(mg|g|ml|lít|cm|mm|%)", content, re.IGNORECASE): return False
-    if not re.search(r"[a-zA-Z]", content): return False
+    if re.search(r"^(mg|g|ml|lít|cm|mm|%|độ|kg)(\s|$|\W)", content, re.IGNORECASE): 
+        return False
+        
+    # 5. Ensure there is alphabetic content in the header title
+    if not re.search(r"[a-zA-Z]", content): 
+        return False
     
     return True
 
 
 # ==============================================================================
-# 2. OCR ENGINE (TEXT ONLY)
+# 2. OCR ENGINE 
 # ==============================================================================
 
 def ocr_process_page(img_array: np.ndarray) -> List[Dict]:
@@ -359,3 +358,6 @@ if __name__ == "__main__":
                     run_pipeline(os.path.join(target, f), args.start, args.end)
         else:
             print(f"[ERROR] Directory '{target}' not found. Please create it or use --input.")
+
+
+# python ocr_data.py --input "input/dieu-tri-hoc-ket-hop-y-hoc-hien-dai-va-y-hoc-co-truyen.pdf"
