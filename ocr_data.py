@@ -27,7 +27,7 @@ class Config:
     BATCH_SIZE = 10
     
     # Regex bắt mục lục cấp 2 (VD: 2.1, 6.2...)
-    REGEX_HEADER_L2 = re.compile(r"^\s*(\d+(?:\.\d+)+)\.?\s+(?P<content>\S.*)$")
+    REGEX_HEADER_L2 = re.compile(r"^\s*(\d+(?:\.\d+)+)\s*\.?\s+(?P<content>.*)$")
 
 # --- INIT DEVICE ---
 COMPUTE_DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
@@ -69,8 +69,14 @@ def validate_header(text):
     match = Config.REGEX_HEADER_L2.match(clean)
     if not match: return False
     
-    # Chỉ lấy đúng 2 cấp số (VD: 2.1), bỏ 2.1.1
-    nums = [n for n in match.group(1).split('.') if n.isdigit()]
+    # Lấy chuỗi số (Ví dụ: "2.2")
+    number_str = match.group(1).strip('.') # Xóa dấu chấm thừa nếu lỡ bị dính vào
+    
+    # Tách ra để đếm cấp độ
+    # "2.2" -> ['2', '2'] (len = 2) -> OK
+    # "2.2.1" -> ['2', '2', '1'] (len = 3) -> False
+    nums = [n for n in number_str.split('.') if n.isdigit()]
+    
     if len(nums) != 2: return False
     
     # Lọc đơn vị đo (1.5 mg)
