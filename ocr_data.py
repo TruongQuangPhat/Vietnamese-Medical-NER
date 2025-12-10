@@ -18,16 +18,22 @@ from vietocr.tool.config import Cfg
 from easyocr import Reader
 
 # --- CONFIGURATION ---
-Image.MAX_IMAGE_PIXELS = None
+Image.MAX_IMAGE_PIXELS = None  # Prevent DecompressionBombError for large images
 
 class Config:
-    DPI_RESOLUTION = 300 # Giữ 300 để OCR nét nhất
-    MARGIN_HEADER = 0.05 # Bỏ 5% trên cùng (Header)
-    MARGIN_FOOTER = 0.1  # Bỏ 10% dưới cùng (Footer)
-    BATCH_SIZE = 10
+    """
+    Global configuration settings for the OCR pipeline.
+    """
+    DPI_RESOLUTION = 300  # High DPI for better OCR accuracy
+    TOLERANCE_Y = 30      # Vertical tolerance (pixels) for line merging
+    MARGIN_HEADER = 0.08  # Ignore top 8% (Header)
+    MARGIN_FOOTER = 0.08  # Ignore bottom 8% (Footer)
+    BATCH_SIZE = 10       # Process 10 pages at a time to save RAM
     
-    # Regex bắt mục lục cấp 2 (VD: 2.1, 6.2...)
+    # Regex to detect Level 2 Headers (e.g., "2.1. Introduction", "3.5 Results")
+    # Matches: Number -> Dot -> Number -> Optional Dot -> Space -> Content
     REGEX_HEADER_L2 = re.compile(r"^\s*(\d+(?:\.\d+)+)\s*\.?\s+(?P<content>.*)$")
+
 
 # --- INIT DEVICE ---
 COMPUTE_DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
@@ -47,68 +53,108 @@ print("Initializing EasyOCR engine...")
 text_detector = Reader(["vi"], gpu=HAS_CUDA, quantize=False)
 
 
-# ==============================================================================
-# 1. UTILS
-# ==============================================================================
-def add_padding(img_np, pad=10):
-    """Thêm viền trắng giúp VietOCR đọc chuẩn hơn"""
+def add_padding(img_np: np.ndarray, pad: int = 10) -> np.ndarray:
+    """
+    Adds white padding around an image crop.
+    
+    Why: VietOCR performs significantly better when text is not touching the edges.
+    
+    Args:
+        img_np (np.ndarray): Input image array (H, W, C).
+        pad (int): Number of pixels to pad on all sides.
+        
+    Returns:
+        np.ndarray: Padded image array.
+    """
     h, w = img_np.shape[:2]
     padded = np.ones((h + 2*pad, w + 2*pad, 3), dtype=np.uint8) * 255
     padded[pad:h+pad, pad:w+pad] = img_np
     return padded
 
-def validate_header(text):
-    """Kiểm tra xem dòng text có phải là Header 2.1, 2.2... không"""
-    if len(text) < 4: return False
+
+def validate_header(text: str) -> bool:
+    """
+    Validates if a text string is a Level 2 Header (e.g., "2.1 Overview").
+    
+    Logic:
+        1. Checks string length.
+        2. Filters out common false positives (Figure captions, Tables).
+        3. Uses Regex to check numerical structure (X.Y).
+        4. Filters out measurement units (e.g., "1.5 mg") that mimic header format.
+        
+    Args:
+        text (str): The text content to validate.
+        
+    Returns:
+        bool: True if it is a valid header, False otherwise.
+    """
+    if not text or len(text.strip()) < 4: return False
     clean = text.strip()
     
-    # Blacklist (tránh nhầm caption ảnh)
+    # 1. Blacklist check (Skip Figure/Table captions)
     if any(clean.lower().startswith(x) for x in ["Hình", "Hinh", "Bảng", "Bang", "Sơ đồ"]):
         return False
 
+    # 2. Regex Pattern Match
     match = Config.REGEX_HEADER_L2.match(clean)
     if not match: return False
     
-    # Lấy chuỗi số (Ví dụ: "2.2")
-    number_str = match.group(1).strip('.') # Xóa dấu chấm thừa nếu lỡ bị dính vào
-    
-    # Tách ra để đếm cấp độ
-    # "2.2" -> ['2', '2'] (len = 2) -> OK
-    # "2.2.1" -> ['2', '2', '1'] (len = 3) -> False
+    # 3. Check Numeric Level (Must have exactly 2 parts, e.g., 2.1)
+    number_str = match.group(1).strip('.')
     nums = [n for n in number_str.split('.') if n.isdigit()]
     
     if len(nums) != 2: return False
     
-    # Lọc đơn vị đo (1.5 mg)
+    # 4. Content Analysis (Filter out Units like mg, ml)
     content = match.group("content")
     if re.search(r"^(mg|g|ml|lít|cm|mm|%)", content, re.IGNORECASE): return False
     if not re.search(r"[a-zA-Z]", content): return False
     
     return True
 
+
 # ==============================================================================
 # 2. OCR ENGINE (TEXT ONLY)
 # ==============================================================================
+
 def ocr_process_page(img_array: np.ndarray) -> List[Dict]:
+    """
+    Performs OCR on a single page image.
+    
+    Pipeline:
+        1. Detect text bounding boxes using EasyOCR.
+        2. Filter out boxes in Header/Footer regions.
+        3. Crop and Recognize text using VietOCR.
+        4. Sort and Merge disjointed words into full lines.
+        
+    Args:
+        img_array (np.ndarray): The full page image.
+        
+    Returns:
+        List[Dict]: A list of text blocks with content and coordinates.
+    """
     img_h, img_w = img_array.shape[:2]
     
+    # Step 1: Detect text boxes
     try:
         results = text_detector.readtext(img_array, detail=1, width_ths=0.7)
-    except: return []
+    except Exception as e:
+        print(f"[WARN] Detection failed: {e}")
+        return []
 
     raw_blocks = []
     y_min_limit = img_h * Config.MARGIN_HEADER
     y_max_limit = img_h * (1 - Config.MARGIN_FOOTER)
 
+    # Step 2: Filter and Recognize
     for box, _, conf in results:
+        # Confidence Threshold
         if conf < 0.25: continue
         
         y_coords = [p[1] for p in box]
         y_center = sum(y_coords) / 4
         
-        # Calculate Height of the text box (Quan trọng cho Dynamic Tolerance)
-        box_height = max(y_coords) - min(y_coords)
-
+        # Filter Header/Footer
         if y_center < y_min_limit or y_center > y_max_limit: continue
 
         xs = [p[0] for p in box]
@@ -116,75 +162,75 @@ def ocr_process_page(img_array: np.ndarray) -> List[Dict]:
         x1, x2 = int(min(xs)), int(max(xs))
         y1, y2 = int(min(ys)), int(max(ys))
 
-        crop = img_array[max(0, y1-5):min(img_h, y2+5), max(0, x1-5):min(img_w, x2+5)]
+        # Expand Crop slightly (Fix lost diacritics like 'Ở')
+        crop_expand = 5
+        crop = img_array[
+            max(0, y1-crop_expand):min(img_h, y2+crop_expand), 
+            max(0, x1-crop_expand):min(img_w, x2+crop_expand)
+        ]
+        
         if crop.size == 0: continue
 
         try:
-            padded_crop = add_padding(crop)
+            # Padding + Recognize
+            padded_crop = add_padding(crop, pad=15)
             text = text_recognizer.predict(Image.fromarray(padded_crop))
             
             if len(text.strip()) > 1:
                 raw_blocks.append({
                     'text': text.strip(),
-                    'y_center': y_center / img_h,
-                    'x_min': x1 / img_w,
-                    'x_max': x2 / img_w,
-                    'height': box_height / img_h # Lưu chiều cao chuẩn hóa
+                    'y_center': y_center / img_h, # Normalized Y for sorting
+                    'x_min': x1
                 })
         except: continue
 
     if not raw_blocks: return []
 
-    # --- [FIX LOGIC] DYNAMIC LINE MERGING ---
+    # Step 3: Line Merging Algorithm (Stable Logic)
+    # Sort vertically first
     raw_blocks.sort(key=lambda item: item['y_center'])
     
     lines = []
     current_line = [raw_blocks[0]]
     
+    # Use normalized tolerance ratio
+    tolerance_ratio = Config.TOLERANCE_Y / img_h
+
     for i in range(1, len(raw_blocks)):
-        current_block = raw_blocks[i]
-        prev_block = current_line[-1]
+        current = raw_blocks[i]
+        prev = current_line[-1]
         
-        # Tính chiều cao trung bình của dòng đang xét
-        avg_height = sum(b['height'] for b in current_line) / len(current_line)
-        
-        # Dynamic Threshold: 60% chiều cao dòng chữ
-        # Nếu dòng cao (tiêu đề), threshold lớn -> Chấp nhận nghiêng
-        # Nếu dòng thấp (footnote), threshold nhỏ -> Tách dòng chặt chẽ
-        dynamic_threshold = avg_height * 0.6 
-        
-        diff = abs(current_block['y_center'] - prev_block['y_center'])
-        
-        if diff <= dynamic_threshold:
-            current_line.append(current_block)
+        # Check vertical distance to merge into same line
+        if abs(current['y_center'] - prev['y_center']) <= tolerance_ratio:
+            current_line.append(current)
         else:
             lines.append(current_line)
-            current_line = [current_block]
+            current_line = [current]
     lines.append(current_line)
 
+    # Step 4: Construct Final Output
     final_output = []
-    for line_group in lines:
-        line_group.sort(key=lambda item: item['x_min'])
-        joined_text = " ".join([b['text'] for b in line_group])
-        
-        min_x = line_group[0]['x_min']
-        max_x = line_group[-1]['x_max']
-        avg_y = sum(b['y_center'] for b in line_group) / len(line_group) # Re-calc avg Y
+    for line in lines:
+        # Sort words left-to-right within the line
+        line.sort(key=lambda k: k['x_min'])
+        joined_text = " ".join([b['text'] for b in line])
         
         final_output.append({
-            'type': 'text',
-            'content': joined_text,
-            'y_center': avg_y,
-            'x_min': min_x,
-            'x_max': max_x
+            'content': joined_text
         })
         
     return final_output
 
+
 # ==============================================================================
 # 3. EXPORT TO WORD
 # ==============================================================================
+
 def save_to_word(data_list: List[Dict], output_path: str):
+    """
+    Saves the extracted text to a .docx file.
+    Inserts </break> tags before Level 2 Headers.
+    """
     doc = Document()
     style = doc.styles['Normal']
     style.font.name = 'Times New Roman'
@@ -199,12 +245,14 @@ def save_to_word(data_list: List[Dict], output_path: str):
     for item in data_list:
         text = item['content']
         
-        # Kiểm tra Header cấp 2 để ngắt đoạn
+        # Identify Header to Insert Break
         if validate_header(text):
-            print(f"[SECTION] {text[:40]}...")
+            print(f"[INFO] New Section Detected: {text[:40]}...")
+            
             if buffer:
                 flush(buffer)
-                # Chèn thẻ Break đỏ
+                
+                # Insert colored Break Tag
                 p = doc.add_paragraph()
                 run = p.add_run('</break>')
                 run.font.color.rgb = RGBColor(255, 0, 0)
@@ -216,47 +264,60 @@ def save_to_word(data_list: List[Dict], output_path: str):
         else:
             buffer.append(item)
             
+    # Flush remaining content
     if buffer: flush(buffer)
     doc.save(output_path)
+
 
 # ==============================================================================
 # 4. MAIN PIPELINE
 # ==============================================================================
-def run_pipeline(pdf_path, start=1, end=None):
+
+def run_pipeline(pdf_path: str, start: int = 1, end: int = None):
+    """
+    Orchestrates the entire OCR process for a single PDF file.
+    
+    Args:
+        pdf_path (str): Path to input PDF.
+        start (int): Start page number.
+        end (int): End page number (None for all).
+    """
     if not os.path.exists(pdf_path):
-        print(f"File not found: {pdf_path}")
+        print(f"[ERROR] File not found: {pdf_path}")
         return
 
     base_name = os.path.splitext(os.path.basename(pdf_path))[0]
     out_dir = os.path.join("output", f"{base_name}")
     os.makedirs(out_dir, exist_ok=True)
     
-    print(f"Processing: {base_name}")
+    print(f"[INFO] Processing Target: {base_name}")
     
+    # Get page count
     try:
         info = pdfinfo_from_path(pdf_path)
         total = info["Pages"]
-    except: total = 1000
+        print(f"[INFO] Total pages: {total}")
+    except: 
+        total = 1000
+        print("[WARN] Could not read PDF metadata. Defaulting to safe limit.")
     
     target_end = min(end, total) if end else total
     all_data = []
     
-    # Chạy Batch
+    # Batch Processing Loop
     for b_start in range(start, target_end + 1, Config.BATCH_SIZE):
         b_end = min(b_start + Config.BATCH_SIZE - 1, target_end)
-        print(f"Batch: {b_start} -> {b_end}")
+        print(f"\n[INFO] Processing Batch: {b_start} -> {b_end}")
         
         try:
             images = convert_from_path(pdf_path, dpi=Config.DPI_RESOLUTION, first_page=b_start, last_page=b_end)
         except Exception as e:
-            print(f"PDF Error: {e}")
+            print(f"[ERROR] PDF Conversion failed: {e}")
             continue
             
         for img in images:
-            # Convert PIL -> Numpy
-            img_np = np.asarray(img)
-            # OCR Text Only
-            page_text = ocr_process_page(img_np)
+            # TEXT ONLY processing
+            page_text = ocr_process_page(np.asarray(img))
             all_data.extend(page_text)
             
         del images
@@ -266,22 +327,35 @@ def run_pipeline(pdf_path, start=1, end=None):
     save_path = os.path.join(out_dir, out_name)
     save_to_word(all_data, save_path)
     
-    print("-" * 30)
-    print(f"DONE: {save_path}")
-    print("-" * 30)
+    print("-" * 50)
+    print(f"[SUCCESS] Workflow Completed.")
+    print(f"[OUTPUT] Saved to: {save_path}")
+    print("-" * 50)
 
+
+# ==============================================================================
+# ENTRY POINT
+# ==============================================================================
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--input', type=str)
-    parser.add_argument('--start', type=int, default=1)
-    parser.add_argument('--end', type=int)
+    parser = argparse.ArgumentParser(description="Medical OCR Tool")
+    parser.add_argument('--input', type=str, help="Path to specific PDF file")
+    parser.add_argument('--start', type=int, default=1, help="Start page number")
+    parser.add_argument('--end', type=int, help="End page number")
+    
     args = parser.parse_args()
     
     if args.input:
         run_pipeline(args.input, args.start, args.end)
     else:
+        # Auto-scan 'input' directory
         target = "input"
         if os.path.exists(target):
-            for f in os.listdir(target):
-                if f.endswith(".pdf"):
+            files = [f for f in os.listdir(target) if f.lower().endswith(".pdf")]
+            if not files:
+                print(f"[INFO] No PDF files found in '{target}'")
+            else:
+                print(f"[INFO] Found {len(files)} files. Starting batch processing...")
+                for f in files:
                     run_pipeline(os.path.join(target, f), args.start, args.end)
+        else:
+            print(f"[ERROR] Directory '{target}' not found. Please create it or use --input.")
