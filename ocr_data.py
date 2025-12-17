@@ -27,7 +27,7 @@ class Config:
     DPI_RESOLUTION = 300  # High DPI for better OCR accuracy
     TOLERANCE_Y = 30      # Vertical tolerance (pixels) for line merging
     MARGIN_HEADER = 0.05  # Ignore top 5% (Header)
-    MARGIN_FOOTER = 0.1   # Ignore bottom 10% (Footer)
+    MARGIN_FOOTER = 0.05   # Ignore bottom 5% (Footer)
     BATCH_SIZE = 10       # Process 10 pages at a time to save RAM
     
     # [UPDATED REGEX]
@@ -177,9 +177,9 @@ def ocr_process_page(img_array: np.ndarray) -> List[Dict]:
             
             if len(text.strip()) > 1:
                 raw_blocks.append({
-                    'text': text.strip(),
-                    'y_center': y_center / img_h, # Normalized Y for sorting
-                    'x_min': x1
+                    "text": text.strip(),
+                    "y_center": y_center / img_h, # Normalized Y for sorting
+                    "x_min": x1
                 })
         except: continue
 
@@ -187,7 +187,7 @@ def ocr_process_page(img_array: np.ndarray) -> List[Dict]:
 
     # Step 3: Line Merging Algorithm (Stable Logic)
     # Sort vertically first
-    raw_blocks.sort(key=lambda item: item['y_center'])
+    raw_blocks.sort(key=lambda item: item["y_center"])
     
     lines = []
     current_line = [raw_blocks[0]]
@@ -200,7 +200,7 @@ def ocr_process_page(img_array: np.ndarray) -> List[Dict]:
         prev = current_line[-1]
         
         # Check vertical distance to merge into same line
-        if abs(current['y_center'] - prev['y_center']) <= tolerance_ratio:
+        if abs(current["y_center"] - prev["y_center"]) <= tolerance_ratio:
             current_line.append(current)
         else:
             lines.append(current_line)
@@ -211,11 +211,11 @@ def ocr_process_page(img_array: np.ndarray) -> List[Dict]:
     final_output = []
     for line in lines:
         # Sort words left-to-right within the line
-        line.sort(key=lambda k: k['x_min'])
-        joined_text = " ".join([b['text'] for b in line])
+        line.sort(key=lambda k: k["x_min"])
+        joined_text = " ".join([b["text"] for b in line])
         
         final_output.append({
-            'content': joined_text
+            "content": joined_text
         })
         
     return final_output
@@ -231,18 +231,18 @@ def save_to_word(data_list: List[Dict], output_path: str):
     Inserts </break> tags before Level 2 Headers.
     """
     doc = Document()
-    style = doc.styles['Normal']
-    style.font.name = 'Times New Roman'
+    style = doc.styles["Normal"]
+    style.font.name = "Times New Roman"
     style.font.size = Pt(13)
     
     buffer = []
     
     def flush(buf):
         for item in buf:
-            doc.add_paragraph(item['content'])
+            doc.add_paragraph(item["content"])
             
     for item in data_list:
-        text = item['content']
+        text = item["content"]
         
         # Identify Header to Insert Break
         if validate_header(text):
@@ -253,7 +253,7 @@ def save_to_word(data_list: List[Dict], output_path: str):
                 
                 # Insert colored Break Tag
                 p = doc.add_paragraph()
-                run = p.add_run('</break>')
+                run = p.add_run("</break>")
                 run.font.color.rgb = RGBColor(255, 0, 0)
                 run.font.bold = True
                 p.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
@@ -337,9 +337,9 @@ def run_pipeline(pdf_path: str, start: int = 1, end: int = None):
 # ==============================================================================
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Medical OCR Tool")
-    parser.add_argument('--input', type=str, help="Path to specific PDF file")
-    parser.add_argument('--start', type=int, default=1, help="Start page number")
-    parser.add_argument('--end', type=int, help="End page number")
+    parser.add_argument("--input", type=str, help="Path to specific PDF file")
+    parser.add_argument("--start", type=int, default=1, help="Start page number")
+    parser.add_argument("--end", type=int, help="End page number")
     
     args = parser.parse_args()
     
