@@ -1,0 +1,322 @@
+0
+010 - 0
+01g
+025g
+025g/viên
+04g
+08g
+1
+1 - 2 đồng cân
+1 - 2 g/24h
+1 - 2 ngày
+1 - 2 phân
+1 - 2 viên
+1 - 2 viên/24h
+1 - 2 viên/ngày
+1 - 2g
+1 - 2g/24 giờ
+1 - 2g/24h
+1 - 2mg
+1 - 2mg/kg/24h
+1 - 2ml
+1 - 3 gói
+1 - 3 tháng
+1 - 3 viên
+1 - 3 viên/24h
+1 - 3mg/kg
+1 - 4 viên
+1 - 4 viên/24h
+1 - 5mg
+1 củ
+1 điểm
+1 đồng
+1 đồng 2 phân
+1 đồng 5 phân
+1 đồng cân
+1 đồng cân 2 phân
+1 gói/ngày
+1 ít
+1 kg
+1 lần
+1 lạng
+1 lát
+1 lít
+1 lít nước
+1 mg
+1 ml
+1 ống
+1 phần
+1 phân 2 ly
+1 phân 5 ly
+1 quả
+1 thang
+1 viên
+1/3 ống
+1/3 trên
+1/4 1/2 viên
+1/4 lít
+1/4 ống
+10 - 16g
+10 - 20mg
+10 lần/phút
+10 ngày
+10 ống
+10 ống/ngày
+100 - 109 mmHg
+100 - 200 giọt
+100 - 200 mg
+100 - 2000 tế bào/mm3
+100 - 400 mg
+100 - 400 mg/24h
+100 lần/phút
+100%
+1000g
+100g
+100mg
+100mg/24h
+100mg/viên
+100ml
+10g
+10mg
+10ml
+10ml/kg/h
+110 - 119 mmHg
+12 - 16g
+12 - 20g
+12 - 40g
+1-2 đồng cân
+120g
+120mg
+120mg/lần
+12g
+1-3 viên/ngày
+14 thang
+140 - 159 mmHg
+140 mmHg
+140mmHg
+14g
+15 - 20 lần
+15 - 25%
+15%
+150 lít/phút
+1500calo
+1500ml - 3000ml
+15mg - 10mg
+15mg - 10mg/24h
+16 - 20g
+160 - 175mmHg
+16g
+180 - 209 mmHg
+180g
+18g
+1g
+1g/24h
+1mg
+1ml
+1ml - 2ml
+1v
+2 - 0
+2 - 3 đồng cân
+2 - 3 gói
+2 - 3 viên
+2 - 4 lần
+2 - 4 viên
+2 - 4 viên/24h
+2 - 6 viên
+2 - 6 viên/24h
+2 - 6v/24h
+2 -3 gói
+2 -3 lần/ngày
+2 4 viên/24h
+2 điểm
+2 đồng 4 phân
+2 đồng cân
+2 đồng cân 5 phân
+2 gói
+2 hạt
+2 lần
+2 lạng
+2 lít
+2 mg
+2 và 3ml
+2 viên
+2 viên/24h
+2/3 trước
+20 - 30g
+20 - 40 mg
+20 - 40 mg/24h
+20 - 40g
+20 - 40mg
+20 - 50mg
+20 - 50mg/1ngày
+20 viên
+20%
+200 - 400mg
+200 600mg/24h
+200000đw
+200000đw/ngày
+2000mg
+2000ml/24h
+200g
+200mg
+200mg/24h
+200ml/24h
+20g
+20g (gói)
+20mg
+20ml/kg/1h
+20mmHg
+24 giờ
+2-4 viên
+240mg
+240mg/lần
+25%
+250
+250g
+25mg
+25mg - 50mg
+25mg - 50mg/1tuần
+25ml
+2g
+2g/24h
+2mg/kg/phút
+2v
+3 - 4 đồng cân
+3 - 4 lần
+3 - 4 lần ngày
+3 - 4 lần/ngày
+3 - 4 tháng
+3 - 4 viên
+3 - 5mg/kg
+3 - 6h/1 ống
+3 4 đồng cân
+3 điểm
+3 đồng cân
+3 hoàn
+3 lạng
+3 lát
+3 lít
+3 phần
+3 quả
+3 thang/tuần
+3%
+30 hạt
+30 lần/phút
+30g
+30mg
+30mg - 20mg
+30mg - 20mg/24h
+30ml
+325mg
+360g
+3g
+3mg
+3ml
+3v
+4 - 12 viên
+4 - 6g
+4 - 6giờ/1lần
+4 - 8 viên
+4 - 8g
+4 hạt
+4 lần
+4 lạng
+4 mũi
+4 quả
+4 viên
+40 - 80g
+40 viên
+400 - 600 mg
+400 - 600 mg/24h
+400g
+40g
+40g/24h
+40mg
+40mg/1lần/1ngày
+40mg/24h
+45 hạt
+48g
+4g
+4g/24 giờ
+4g/24h
+4mg
+4v
+4v - 6v
+5 - 10g
+5 - 10g/24h
+5 - 10mg
+5 - 10mg/tuần
+5 - 20mm
+5 đồng cân
+5 lạng
+5 phân
+5%
+50 - 100 mg
+50 - 100 mg/24h
+50 - 70ml
+50 cái
+50 lần
+50%
+500mg
+500ml
+500ml/24h
+50g
+50mg
+50mg/1ngày
+50mg/24h
+50ml
+55g
+5g
+5l
+5mg
+5mg/kg
+5mg/kg/24h
+5ml
+6 - 10 viên
+6 - 10g
+6 - 12g
+6 - 8 lít
+6 - 8 lít/phút
+6 lạng
+6 thang
+60 - 120mg
+60 - 120mg/lần
+600ml
+60g
+60mg
+60mg - 40mg
+60mg - 40mg/24h
+60mg/lần
+6g
+6mg
+6mg/kg/1h
+6v/24h
+7
+7 ly
+70 - 80%
+70 - 80mmHg
+700ml
+70mmHg
+750 - 1000ml
+8 đồng cân
+8 phân
+80%
+800mg
+80g
+80mg
+80mmHg
+8g
+8g/24h
+8mg
+8mg/24h
+9 đồng cân
+9 hạt
+9 ngành
+90 - 99mmHg
+90 mmHg
+một đồng 5 phân
+một đồng cân
+một lát
+một lít nước
+một phân 2 ly
+XX giọt/phút
